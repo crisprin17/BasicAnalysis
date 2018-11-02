@@ -5,3 +5,5 @@ Scan_cut_original.C = Run in ROOT. Take the files in the TChain and see how many
 Make_offline_plot.C = Run in ROOT. Make a NOvA style histogram. 
 
 Create_newfilewithCUTS.C = Run in ROOT. Take an Upmu histogram and cuts on the variables to have a file with only selected events.
+
+sorteANDcheck_mom.py = Sort and check momentum of simulated neutrino particles from log file to determine if there are duplicates
