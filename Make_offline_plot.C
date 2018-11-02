@@ -46,19 +46,8 @@ void Make_trigger_plot(){
    gROOT->Reset();
   TH1::SetDefaultSumw2();
   TCanvas c;
-
-  //  TFile *_file0 = TFile::Open("/nova/ana/users/crisprin/Eval_S17-10-30/root/UpMuAnalysis_Hist_NewWimp_tautau_NEWBox_hugeSample_CC_March4_reco.root");
-  // TFile *_file1 = TFile::Open("/nova/ana/users/crisprin/Eval_S17-10-30/root/UpMuAnalysis_Hist_NewWimp_tautau_NEWBox_hugeSample_CC_March4_reco_TIMEshift9.root");
-  
-  //   TFile *_file0 = TFile::Open("/nova/ana/users/crisprin/Eval_S17-10-30/root/UpMuAnalysis_Hist_Cosmic_MC_oldgain.root");
-  // TFile *_file1 = TFile::Open("/nova/ana/users/crisprin/Eval_S17-10-30/root/UpMuAnalysis_Hist_Cosmic_Data_oldgain_1900events.root");
-
-  //TFile *_file0 = TFile::Open("/nova/app/users/crisprin/Eval_S17-10-30/NewUpMuAnalysis_Hist_Cosmic_MC_oldgain_Mean0smear1.root");
   TFile *_file1 = TFile::Open("/nova/ana/users/crisprin/Eval_S17-10-30/root/NewUpMuAnalysis_Hist_Cosmic_Data_oldgain_shiftM0S7.root");
-  
   TFile *_file0 = TFile::Open("/nova/ana/users/crisprin/Eval_S17-10-30/root/NewUpMu_MCCosmic.root");
-  //  TFile *_file1 = TFile::Open("/nova/ana/users/crisprin/Eval_S17-10-30/root/NewUpMuAnalysis_Hist_Cosmic_Data_oldgain_shiftM0S5.root");
-
   TTree *myt0 = (TTree*)_file0->Get("newtree");//read/ntp_track
   TTree *myt1 = (TTree*)_file1->Get("newtree");//newtree
 
@@ -68,8 +57,7 @@ void Make_trigger_plot(){
 
   TStyle* novaStyle = new TStyle("novaStyle", "NOvA Style");
 
-  // Centre title                                                      
-                                                                                  
+  // Centre title                                                                                                                                      
   novaStyle->SetTitleAlign(22);
   novaStyle->SetTitleX(.5);
   novaStyle->SetTitleY(.95);
@@ -153,32 +141,18 @@ void Make_trigger_plot(){
   h1->SetMarkerStyle(kFullCircle);
   h1->SetMarkerColor(kBlack); 
   h1->Draw("E1");
-  gROOT->ForceStyle();
- 
-  // h0->Draw("E1, SAME");
   h0->Draw("SAME");
-  //  TLegend* leg = new TLegend(.6, .75, .85, .90);
-  TLatex* prelima = new TLatex(.9, .95, "NOvA Preliminary");
-  prelima->SetTextColor(kBlue);
-  prelima->SetNDC();
-  prelima->SetTextSize(2/30.);
-  prelima->SetTextAlign(32);
-  prelima->Draw();
+
   TLegend* leg = new TLegend(.55, .75, .75, .85);  
   // No border on legends                                                                                                                                                                       
   leg->SetBorderSize(0);
   leg->SetFillStyle(0);
   leg->AddEntry(h0, "MC Cosmic", "lf");
   leg->AddEntry(h1, "Data Cosmic", "lf"); 
-
- //  leg->AddEntry(h0, "WIMPSIM Nominal", "lf");
-  // leg->AddEntry(h1, "WIMPSIM Shifted", "lf");
-  // leg->AddEntry(h2, "WIMPs Simulation", "lf");
   leg->SetTextSize(0.05);
   leg->Draw();
 
   c.SaveAs("Chi2_Cosmic_dataandMC_Oldgain_aug21.png");
-  // c.SaveAs("Chi2_WIMPSIM_shift_aug6.pdf"); 
  c.Update();
 }
 
