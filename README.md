@@ -10,3 +10,5 @@ sorteANDcheck_mom.py = Sort and check momentum of simulated neutrino particles f
 
 
 UpMuSim_plots.C and WimpSim_plot.C = makes relevant plots for the upward going muon simulation
+
+efficiency_vs_variable.C = plot the efficiency vs a variable in TGraph
