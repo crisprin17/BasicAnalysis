@@ -1,0 +1,382 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[24]:
+
+
+get_ipython().run_line_magic('matplotlib', 'notebook')
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.axes as ax
+import pandas as pd
+import csv
+from math import sqrt
+from math import log
+import scipy.optimize as opt
+import scipy.special as sp
+
+pd.options.mode.chained_assignment = None
+
+
+# To study the behavior of upward going vs downward going particles, we costruct a 2D plot with the observed and expected time for each hit in tracks, because they will behave in opposite way.
+# 
+# We use Simulation of Cosmic ray particles (downward going) and Dark Matter particle (upward going)
+
+# In[18]:
+
+
+def Choose_view(dataframe, View_XZ):
+    """
+    dataframe        :   type<array_like>
+    View_XZ          :   type<bool>
+    
+    Chose dataframe and if you want XZ view
+    and returns a dataframe with only the variable we will use .
+    
+    """
+    if View_XZ is True:
+        View = dataframe[['Energy','X','Y','Z','HitTime']][dataframe['View'] == 0]
+        return View
+    else:
+        View = dataframe[['Energy','X','Y','Z','HitTime']][dataframe['View'] == 1]
+        return View
+
+
+# The error on each point depends on it's PE value, through a function studied empirically.
+
+# In[3]:
+
+
+def getErr(Energy, Simulation):
+    """
+    dataframe        :   type<array_like>
+    Simulation       :   type<bool>
+    
+    Takes the Energy value and if the data are simulated.
+    Returns the error associated with each point
+    
+    """
+    if Simulation is True:
+        return 163551 / (1847.39 + pow( Energy, 2.10082)) + 8.65312
+    else:
+        return 165143 / (1882.9 + pow( Energy, 2.11447)) + 10.4321
+
+
+# To calculate the expected and observed time variables, we need to take the hit that happened at the lowest and highest point in the X or Y view (corresponding to the first and the last point in the list).
+
+# In[4]:
+
+
+def Get_variables(dataframe):
+    """
+    dataframe           :   type<pd.dataframe>  
+    
+    For a dataframe and returns the value of the first and last point in X, Y, Z direction.
+
+    """
+    x_start  = dataframe['X'].iloc[0]
+    x_end    = dataframe['X'].iloc[-1]
+    y_start  = dataframe['Y'].iloc[0]
+    y_end    = dataframe['Y'].iloc[-1]
+    z_start  = dataframe['Z'].iloc[0]
+    z_end    = dataframe['Z'].iloc[-1]
+    
+    return x_start, x_end, y_start, y_end, z_start, z_end 
+
+
+# The observed time is the time registered by the detector when the events happens.
+# 
+# The expected time is calculated as distance divided by the velocity for each point on the event
+
+# In[5]:
+
+
+def Calculate_TimeOfFlight_ratio(x_start, x_end, y_start, y_end, z_start, z_end):
+    """
+    x_start, x_end, y_start, y_end, z_start, z_end :   type<float>  
+    
+    Takes the x, y, z start and end points and returns the time the particle should have take
+    to travel a distance d.
+    
+    """
+    distance           = sqrt( ( x_start - x_end )**2 + ( y_start - y_end )**2 + ( z_start - z_end)**2 )
+    TimeOfFlight       = distance / 29.97 #light speed in cm/ns
+    TimeOfFlight_ratio = TimeOfFlight / ( x_end - x_start )
+    
+    return TimeOfFlight_ratio
+
+
+# In[6]:
+
+
+def Calculate_expectation(dataframe, x_start, x_end, y_start, y_end, z_start, z_end):
+    """
+    dataframe           :   type<pd.dataframe>
+    x_start, x_end      :   type<float>   
+    
+    Takes the dataframe and the x, y, z start and end points and returns a new column with 
+    the expected time for each point
+    
+    """
+    dataframe['Expected time']     = dataframe['X'].apply( lambda x : Calculate_TimeOfFlight_ratio(x_start, x_end, y_start, y_end, z_start, z_end) * (x - x_start) )
+    
+    return dataframe['Expected time']
+
+
+# In[7]:
+
+
+def Calculate_expectation_error(dataframe, Simulation):
+    """
+    dataframe          :   type<pd.dataframe>
+    Simulation         :   type<bool>    
+    
+    Takes a dataframe and if it is Simulated data
+    returns a list with the errors associated to each point in the dataframe.
+    
+    """
+    dataframe['Expected time error'] = dataframe['Energy'].apply(lambda x : getErr(x,Simulation) )
+    errors_list =  dataframe['Expected time error'].tolist()
+    
+    return errors_list
+
+
+# In[21]:
+
+
+def guess_initial_parameters(xs, ys):
+    """
+    xs          :   type<list> or type<array>
+    ys          :   type<list> or type<array>
+    
+    Takes two array and returns a first approx value for the slope and intercept
+    """
+    ##guess the slope
+    slope = (ys[-1]-ys[0])/(xs[-1]-xs[0])
+    alpha = 1/slope
+    ##guess the intercept
+    intercept = np.mean([ys[-1] - xs[-1]/alpha, ys[0] - xs[0]/alpha])
+    
+    guess = ('slope', alpha, 'intercept', intercept)
+    print ('Initial parameters:',guess)
+    return [alpha, intercept]
+
+
+# In[9]:
+
+
+def func(x, slope, intercept):
+    """
+    x           :   type<list> or type<array>
+    slope       :   type<float>
+    intercept   :   type<float>
+    Takes an array and a value for the slope and intercept
+    and return a line
+    """
+    return slope * x + intercept
+
+
+# In[30]:
+
+
+def Make_Plot(dataframe, name , error_list):
+    """
+    dataframe          :   type<pd.dataframe>
+    name               :   type<string>    
+    error_list         :   type<list>
+    
+    Takes a dataframe, a name for the plot, and the error associated with the expectation
+    returns a plot of observed vs expected time fitted by a weighted line.
+    
+    """
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    
+    x = dataframe['HitTime']
+    y = dataframe['Expected time']
+   
+    #each residual should be multiplied with the corresponding weigh   
+    slope, intercept = guess_initial_parameters(dataframe['HitTime'].tolist(), dataframe['Expected time'].tolist())
+
+    popt, pcov = opt.curve_fit(func, x, y,p0=(slope, intercept), sigma=error_list, absolute_sigma=True)
+    line = popt[0] * dataframe['HitTime'] + popt[1]
+
+    plt.title("Observed vs Expected time " + name)
+    plt.xlabel("T_obs (ns)")
+    plt.ylabel("T_exp (ns)")
+    
+    plt.errorbar(dataframe['HitTime'], dataframe['Expected time'], yerr = error_list, ecolor = 'blue', fmt = 'o', marker = 's', mfc = 'green', mec = 'green', ms = 3, mew = 3)
+    plt.plot(dataframe['HitTime'], line, label = "fit", color = 'red');
+ 
+    print('The slope value for the '+ name +' hypothesis is = '+ str(slope))
+    return plt.show()
+
+
+# We can define the Chi2 calculation with two fixed slope +1 and -1 (representing upward and downward going) to get an idea about the probability that the track is an upward going one:
+
+# In[25]:
+
+
+def Chi2_def(x, y, ey):
+    """
+    x           :   type<list> or type<array>
+    y           :   type<list> or type<array>
+    ey          :   type<list> or type<array>
+    
+    Takes x and y array and the error associated with the expectation
+    returns the Chi2/ndof and probability associated with the upward or downward going hypothesis
+    
+    """
+    ## Before going ahead, make sure we have sensible arrays
+    assert(len(x) == len(y))
+    assert(len(x) == len(ey))
+    assert(len(ey) >= 2)
+
+    ## Define the sums needed for the calculation:
+    s   = 0.0
+    sx  = 0.0
+    sxx = 0.0
+    sy  = 0.0
+    sxy = 0.0
+    syy = 0.0
+    n = len(x)
+    
+   ## Loop over data to calculate relevant sums:
+    for i in range(n) :
+        e    = float(ey[i]) 
+        s   += 1.0 / (e**2)
+        sx  += float(x[i]) / (e**2)
+        sy  += float(y[i]) / (e**2)
+
+    up_intercept = (sy - sx) / s
+    dn_intercept = (sy + sx) / s
+    
+    ## So now you have data points and a fit/theory. How to get the fit quality?
+    ## The answer is to calculate the Chi2 and Ndof, and from them get their
+    ## probability using a function 
+    Chi2_calc_up = 0.0
+    Chi2_calc_dn = 0.0
+    for i in range(n) : 
+        e = float(ey[i])
+        fit_value_up = up_intercept + x[i]
+        fit_value_dn = dn_intercept - x[i]
+        Chi2_calc_up += ((y[i] - fit_value_up) / e)**2.0
+        Chi2_calc_dn += ((y[i] - fit_value_dn) / e)**2.0
+  
+    ## Number of variables (slope and intercept)
+    Nvar = 2       
+    ## Number of degrees of freedom
+    Ndof_calc = n - Nvar   
+
+    ## From Chi2 and Ndof, one can calculate the probability of obtaining this
+    ## or something worse (i.e. higher Chi2).Regularized upper incomplete gamma function
+    ## The returned probability corresponds to 1-P(a,x), 
+    ## which denotes the probability that an observed Chi-squared exceeds the value chi2 by chance, even for a correct model
+
+    Prob_calc_up = sp.gammaincc( (Ndof_calc) / 2.0, Chi2_calc_up / 2.0)
+    Prob_calc_dn = sp.gammaincc( (Ndof_calc) / 2.0, Chi2_calc_dn / 2.0)
+     
+    if (Prob_calc_up < 1e-30):
+        Prob_calc_up = 1e-30
+    if (Prob_calc_dn < 1e-30):
+        Prob_calc_dn = 1e-30
+        
+    print ('The goodness of the fit for the upward-going hypothesis = ' + str( Chi2_calc_up / (n-2) ) )
+    print ('The goodness of the fit for the down-going hypothesis = ' + str( Chi2_calc_dn / (n-2) ) )
+    
+    return Prob_calc_up, Chi2_calc_up / (Ndof_calc), Prob_calc_dn, Chi2_calc_dn / (Ndof_calc)
+
+
+# In[19]:
+
+
+def Get_log_likelihood_ratio(dataframe, errors_list):
+    """
+    dataframe          :   type<pd.dataframe>
+    error_list         :   type<list> 
+    
+    Takes a dataframe and the error list,
+    returns the log likelihood ratio for the upward or downward going hypothesis
+    
+    """
+    xlist = dataframe['HitTime'].tolist()
+    ylist = dataframe['Expected time'].tolist()
+
+    Prob_upward_going, Chi2_upward_going, Prob_downward_going, Chi2_downward_going = Chi2_def(xlist, ylist, errors_list)
+
+    LLR = log(Prob_upward_going / Prob_downward_going)
+    
+    return print ('The logLikelihood ratio value for the upward-going hypothesis is = ' + str(LLR))
+
+
+# In[13]:
+
+
+#SIGNAL
+col = [x for x in range(0,32) if x % 2 == 1]
+SIG = pd.read_csv('Desktop/Python/Wimps_2hits_new.txt',usecols=col,delimiter=' ',header=None)
+SIG.columns=['Energy','Min Energy','GeV','X','Y','Z','HitTime','View','ID','Plane','Cell','Channel','Digital time','TNS','ADC','PE']
+SIG.head()
+
+
+# In[29]:
+
+
+Signal = Choose_view(SIG, True)
+x_start_s, x_end_s, y_start_s, y_end_s, z_start_s, z_end_s  = Get_variables(Signal)
+TimeOfFlight_ratio_s = Calculate_TimeOfFlight_ratio(x_start_s, x_end_s, y_start_s, y_end_s, z_start_s, z_end_s)
+Signal['Expected time']= Calculate_expectation(Signal, x_start_s, x_end_s, y_start_s, y_end_s, z_start_s, z_end_s)
+errors_list_s = Calculate_expectation_error(Signal, True)
+
+get_ipython().run_line_magic('matplotlib', 'inline')
+Make_Plot(Signal, 'Signal' , errors_list_s)
+Get_log_likelihood_ratio(Signal, errors_list_s)
+
+
+# In[ ]:
+
+
+#BACKGROUND
+col = [x for x in range(0,32) if x % 2 == 1]
+BKG = pd.read_csv('Desktop/Python/Cosmic_1hits_new.txt',usecols=col,delimiter=' ',header=None)
+BKG.columns=['Energy','Min Energy','GeV','X','Y','Z','HitTime','View','ID','Plane','Cell','Channel','Digital time','TNS','ADC','PE']
+BKG.head()
+
+
+# In[ ]:
+
+
+Background = Choose_view(BKG, True)
+x_start_b, x_end_b, y_start_b, y_end_b, z_start_b, z_end_b  = Get_variables(Background)
+TimeOfFlight_ratio_b = Calculate_TimeOfFlight_ratio(x_start_b, x_end_b, y_start_b, y_end_b, z_start_b, z_end_b)
+Background['Expected time']= Calculate_expectation(Background, x_start_b, x_end_b, y_start_b, y_end_b, z_start_b, z_end_b)
+errors_list_b = Calculate_expectation_error(Background, True)
+
+get_ipython().run_line_magic('matplotlib', 'inline')
+Make_Plot(Background, 'Background' , errors_list_b)
+Get_log_likelihood_ratio(Background, errors_list_b)
+
+
+# In[ ]:
+
+
+# Read in the fil
+col = [x for x in range(1,32) if x % 2 == 1]
+Data = pd.read_csv('Desktop/Python/DDUPMU_2hits_new.txt',usecols=col,delimiter=' ',header=None,skiprows=1,skipfooter=1,engine='python')
+Data .columns=['Energy','Min Energy','GeV','X','Y','Z','HitTime','View','ID','Plane','Cell','Channel','Digital time','TNS','ADC','PE']
+Data.head()
+
+
+# In[ ]:
+
+
+Data_selected = Choose_view(Data, False)
+x_start_data, x_end_data, y_start_data, y_end_data, z_start_data, z_end_data  = Get_variables(Data_selected)
+TimeOfFlight_ratio_data = Calculate_TimeOfFlight_ratio(x_start_data, x_end_data, y_start_data, y_end_data, z_start_data, z_end_data)
+Data_selected['Expected time']= Calculate_expectation(Data_selected, x_start_data, x_end_data, y_start_data, y_end_data, z_start_data, z_end_data)
+errors_list_data = Calculate_expectation_error(Data_selected, False)
+
+get_ipython().run_line_magic('matplotlib', 'inline')
+Make_Plot(Data_selected, 'selected data' , errors_list_data )
+Get_log_likelihood_ratio(Data_selected, errors_list_data )
+
